@@ -1,4 +1,4 @@
-from src.do_tool.tool_can_use.base_tool import BaseTool,run_lua_code
+from src.do_tool.tool_can_use.base_tool import BaseTool, run_lua_code
 from src.common.logger import get_module_logger
 from typing import Dict, Any
 
@@ -41,7 +41,7 @@ class CompareNumbersTool(BaseTool):
             """
             CompareNumbers = run_lua_code(lua_code).CompareNumbers
             result = CompareNumbers(num1, num2)
-            
+
             return {"name": self.name, "content": result}
         except Exception as e:
             logger.error(f"比较数字失败: {str(e)}")
