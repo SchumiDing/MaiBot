@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, Optional, Type
+from abc import ABC, abstractmethod
 import inspect
 import importlib
 import pkgutil
@@ -11,7 +12,7 @@ logger = get_module_logger("base_tool")
 TOOL_REGISTRY = {}
 
 
-class BaseTool:
+class BaseTool(ABC):
     """所有工具的基类"""
 
     # 工具名称，子类必须重写
@@ -36,6 +37,7 @@ class BaseTool:
             "function": {"name": cls.name, "description": cls.description, "parameters": cls.parameters},
         }
 
+    @abstractmethod
     async def execute(self, function_args: Dict[str, Any], message_txt: str = "") -> Dict[str, Any]:
         """执行工具函数
 
@@ -111,3 +113,17 @@ def get_tool_instance(tool_name: str) -> Optional[BaseTool]:
     if not tool_class:
         return None
     return tool_class()
+
+def run_lua_code(lua_code: str):
+    """兼容Lua代码运行（小工具）
+
+    Args:
+        lua_code (str): Lua代码
+
+    Returns:
+        _LuaTable: Lua运行时的全局变量
+    """
+    from lupa import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(lua_code)
+    return lua.globals()
