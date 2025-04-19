@@ -32,6 +32,8 @@ class CompareNumbersTool(BaseTool):
         try:
             num1 = function_args.get("num1")
             num2 = function_args.get("num2")
+            if not (isinstance(num1, (int, float)) and isinstance(num2, (int, float))):
+                raise ValueError("参数'num1'和'num2'必须为数字")
             lua_code = """
                 function CompareNumbers(a, b)
                     return a .. (a > b and " 大于 " or a < b and " 小于 " or " 等于 ") .. b

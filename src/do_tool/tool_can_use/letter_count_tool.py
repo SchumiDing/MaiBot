@@ -36,8 +36,8 @@ class LetterCountTool(BaseTool):
         try:
             word = function_args.get("word")
             letter = function_args.get("letter")
-            if re.match(r"^[a-zA-Z]+$", letter) is None:
-                raise ValueError("请输入英文字母")
+            if re.match(r"^[a-zA-Z]$", letter) is None:
+                raise ValueError("请输入单个英文字母")
             lua_code = """
                 function LetterCount(inputStr, targetLetter)
                     local lower = (inputStr:gsub("[^"..targetLetter:lower().."]", "")):len()
