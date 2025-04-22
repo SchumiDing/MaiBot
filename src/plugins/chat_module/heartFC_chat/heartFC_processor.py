@@ -11,8 +11,8 @@ from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ...chat.chat_stream import chat_manager
 from ...chat.message_buffer import message_buffer
 from ...utils.timer_calculater import Timer
-from .interest import InterestManager
 from src.plugins.person_info.relationship_manager import relationship_manager
+from .reasoning_chat import ReasoningChat
 
 # 定义日志配置
 processor_config = LogConfig(
@@ -21,15 +21,11 @@ processor_config = LogConfig(
 )
 logger = get_module_logger("heartFC_processor", config=processor_config)
 
-# # 定义兴趣度增加触发回复的阈值 (移至 InterestManager)
-# INTEREST_INCREASE_THRESHOLD = 0.5
 
-
-class HeartFC_Processor:
+class HeartFCProcessor:
     def __init__(self):
         self.storage = MessageStorage()
-        self.interest_manager = InterestManager()
-        # self.chat_instance = chat_instance  # 持有 HeartFC_Chat 实例
+        self.reasoning_chat = ReasoningChat.get_instance()
 
     async def process_message(self, message_data: str) -> None:
         """处理接收到的原始消息数据，完成消息解析、缓冲、过滤、存储、兴趣度计算与更新等核心流程。
@@ -72,11 +68,17 @@ class HeartFC_Processor:
                 user_info=userinfo,
                 group_info=groupinfo,
             )
-            if not chat:
-                logger.error(
-                    f"无法为消息创建或获取聊天流: user {userinfo.user_id}, group {groupinfo.group_id if groupinfo else 'None'}"
-                )
+
+            # --- 确保 SubHeartflow 存在 ---
+            subheartflow = await heartflow.create_subheartflow(chat.stream_id)
+            if not subheartflow:
+                logger.error(f"无法为 stream_id {chat.stream_id} 创建或获取 SubHeartflow，中止处理")
                 return
+
+            # --- 添加兴趣追踪启动 (现在移动到这里，确保 subheartflow 存在后启动) ---
+            # 在获取到 chat 对象和确认 subheartflow 后，启动对该聊天流的兴趣监控
+            await self.reasoning_chat.start_monitoring_interest(chat)  # start_monitoring_interest 内部需要修改以适应
+            # --- 结束添加 ---
 
             message.update_chat_stream(chat)
 
@@ -90,28 +92,27 @@ class HeartFC_Processor:
                 message.raw_message, chat, userinfo
             ):
                 return
-            logger.trace(f"过滤词/正则表达式过滤成功: {message.processed_plain_text}")
 
             # 查询缓冲器结果
             buffer_result = await message_buffer.query_buffer_result(message)
 
             # 处理缓冲器结果 (Bombing logic)
             if not buffer_result:
-                F_type = "seglist"
+                f_type = "seglist"
                 if message.message_segment.type != "seglist":
-                    F_type = message.message_segment.type
+                    f_type = message.message_segment.type
                 else:
                     if (
                         isinstance(message.message_segment.data, list)
                         and all(isinstance(x, Seg) for x in message.message_segment.data)
                         and len(message.message_segment.data) == 1
                     ):
-                        F_type = message.message_segment.data[0].type
-                if F_type == "text":
+                        f_type = message.message_segment.data[0].type
+                if f_type == "text":
                     logger.debug(f"触发缓冲，消息：{message.processed_plain_text}")
-                elif F_type == "image":
+                elif f_type == "image":
                     logger.debug("触发缓冲，表情包/图片等待中")
-                elif F_type == "seglist":
+                elif f_type == "seglist":
                     logger.debug("触发缓冲，消息列表等待中")
                 return  # 被缓冲器拦截，不生成回复
 
@@ -141,21 +142,35 @@ class HeartFC_Processor:
                 logger.error(f"计算记忆激活率失败: {e}")
                 logger.error(traceback.format_exc())
 
+            # --- 修改：兴趣度更新逻辑 --- #
             if is_mentioned:
-                interested_rate += 0.8
+                interest_increase_on_mention = 2
+                mentioned_boost = interest_increase_on_mention  # 从配置获取提及增加值
+                interested_rate += mentioned_boost
+                logger.trace(f"消息提及机器人，额外增加兴趣 {mentioned_boost:.2f}")
 
-            # 更新兴趣度
+            # 更新兴趣度 (调用 SubHeartflow 的方法)
+            current_interest = 0.0  # 初始化
             try:
-                self.interest_manager.increase_interest(chat.stream_id, value=interested_rate)
-                current_interest = self.interest_manager.get_interest(chat.stream_id)  # 获取更新后的值用于日志
+                # 获取当前时间，传递给 increase_interest
+                current_time = time.time()
+                subheartflow.interest_chatting.increase_interest(current_time, value=interested_rate)
+                current_interest = subheartflow.get_interest_level()  # 获取更新后的值
+
                 logger.trace(
-                    f"使用激活率 {interested_rate:.2f} 更新后 (通过缓冲后)，当前兴趣度: {current_interest:.2f}"
+                    f"使用激活率 {interested_rate:.2f} 更新后 (通过缓冲后)，当前兴趣度: {current_interest:.2f} (Stream: {chat.stream_id})"
+                )
+
+                # 添加到 SubHeartflow 的 interest_dict
+                subheartflow.add_interest_dict_entry(message, interested_rate, is_mentioned)
+                logger.trace(
+                    f"Message {message.message_info.message_id} added to interest dict for stream {chat.stream_id}"
                 )
 
             except Exception as e:
-                logger.error(f"更新兴趣度失败: {e}")  # 调整日志消息
+                logger.error(f"更新兴趣度失败 (Stream: {chat.stream_id}): {e}")
                 logger.error(traceback.format_exc())
-            # ---- 兴趣度计算和更新结束 ----
+            # --- 结束修改 --- #
 
             # 打印消息接收和处理信息
             mes_name = chat.group_info.group_name if chat.group_info else "私聊"

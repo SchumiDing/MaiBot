@@ -169,7 +169,7 @@ class PersonInfoManager:
         """给某个用户取名"""
         if not person_id:
             logger.debug("取名失败：person_id不能为空")
-            return
+            return None
 
         old_name = await self.get_value(person_id, "person_name")
         old_reason = await self.get_value(person_id, "name_reason")
@@ -198,9 +198,9 @@ class PersonInfoManager:
                 "nickname": "昵称",
                 "reason": "理由"
             }"""
-            logger.debug(f"取名提示词：{qv_name_prompt}")
+            # logger.debug(f"取名提示词：{qv_name_prompt}")
             response = await self.qv_name_llm.generate_response(qv_name_prompt)
-            logger.debug(f"取名回复：{response}")
+            logger.debug(f"取名提示词：{qv_name_prompt}\n取名回复：{response}")
             result = self._extract_json_from_text(response[0])
 
             if not result["nickname"]:
@@ -217,7 +217,7 @@ class PersonInfoManager:
                 await self.update_one_field(person_id, "name_reason", result["reason"])
 
                 self.person_name_list[person_id] = result["nickname"]
-                logger.debug(f"用户 {person_id} 的名称已更新为 {result['nickname']}，原因：{result['reason']}")
+                # logger.debug(f"用户 {person_id} 的名称已更新为 {result['nickname']}，原因：{result['reason']}")
                 return result
             else:
                 existing_names += f"{result['nickname']}、"

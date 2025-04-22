@@ -2,7 +2,7 @@ import random
 import time
 import re
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import jieba
 import numpy as np
@@ -76,18 +76,20 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, float]:
     else:
         if not is_mentioned:
             # 判断是否被回复
-            if re.match("回复[\s\S]*?\((\d+)\)的消息，说：", message.processed_plain_text):
+            if re.match(
+                f"\[回复 [\s\S]*?\({str(global_config.BOT_QQ)}\)：[\s\S]*?\]，说：", message.processed_plain_text
+            ):
                 is_mentioned = True
-
-            # 判断内容中是否被提及
-            message_content = re.sub(r"@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
-            message_content = re.sub(r"回复[\s\S]*?\((\d+)\)的消息，说： ", "", message_content)
-            for keyword in keywords:
-                if keyword in message_content:
-                    is_mentioned = True
-            for nickname in nicknames:
-                if nickname in message_content:
-                    is_mentioned = True
+            else:
+                # 判断内容中是否被提及
+                message_content = re.sub(r"@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
+                message_content = re.sub(r"\[回复 [\s\S]*?\(((\d+)|未知id)\)：[\s\S]*?\]，说：", "", message_content)
+                for keyword in keywords:
+                    if keyword in message_content:
+                        is_mentioned = True
+                for nickname in nicknames:
+                    if nickname in message_content:
+                        is_mentioned = True
         if is_mentioned and global_config.mentioned_bot_inevitable_reply:
             reply_probability = 1.0
             logger.info("被提及，回复概率设置为100%")
@@ -688,7 +690,7 @@ def count_messages_between(start_time: float, end_time: float, stream_id: str) -
         return 0, 0
 
 
-def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal") -> str:
+def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal") -> Optional[str]:
     """将时间戳转换为人类可读的时间格式
 
     Args:
@@ -716,6 +718,7 @@ def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal"
             return f"{int(diff / 86400)}天前:\n"
         else:
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)) + ":\n"
+    return None
 
 
 def parse_text_timestamps(text: str, mode: str = "normal") -> str:
