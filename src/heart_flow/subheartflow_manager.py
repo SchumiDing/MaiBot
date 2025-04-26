@@ -2,6 +2,7 @@ import asyncio
 import time
 import random
 from typing import Dict, Any, Optional, List
+import json  # 导入 json 模块
 
 # 导入日志模块
 from src.common.logger import get_module_logger, LogConfig, SUBHEARTFLOW_MANAGER_STYLE_CONFIG
@@ -13,6 +14,12 @@ from src.plugins.chat.chat_stream import chat_manager
 from src.heart_flow.sub_heartflow import SubHeartflow, ChatState
 from src.heart_flow.mai_state_manager import MaiStateInfo
 from .observation import ChattingObservation
+
+# 导入LLM请求工具
+from src.plugins.models.utils_model import LLMRequest
+from src.config.config import global_config
+
+import traceback
 
 # 初始化日志记录器
 
@@ -33,6 +40,15 @@ class SubHeartflowManager:
         self.subheartflows: Dict[Any, "SubHeartflow"] = {}
         self._lock = asyncio.Lock()  # 用于保护 self.subheartflows 的访问
         self.mai_state_info: MaiStateInfo = mai_state_info  # 存储传入的 MaiStateInfo 实例
+
+        # 为 LLM 状态评估创建一个 LLMRequest 实例
+        # 使用与 Heartflow 相同的模型和参数
+        self.llm_state_evaluator = LLMRequest(
+            model=global_config.llm_heartflow,  # 与 Heartflow 一致
+            temperature=0.6,  # 与 Heartflow 一致
+            max_tokens=1000,  # 与 Heartflow 一致 (虽然可能不需要这么多)
+            request_type="subheartflow_state_eval",  # 保留特定的请求类型
+        )
 
     def get_all_subheartflows(self) -> List["SubHeartflow"]:
         """获取所有当前管理的 SubHeartflow 实例列表 (快照)。"""
@@ -74,7 +90,7 @@ class SubHeartflowManager:
                 # 注册子心流
                 self.subheartflows[subheartflow_id] = new_subflow
                 heartflow_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
-                logger.info(f"[{heartflow_name}] 开始看消息")
+                logger.info(f"[{heartflow_name}] 开始接收消息")
 
                 # 启动后台任务
                 asyncio.create_task(new_subflow.subheartflow_start_working())
@@ -102,24 +118,6 @@ class SubHeartflowManager:
                 logger.debug(f"[子心流管理] {stream_name} 已是ABSENT状态")
         except Exception as e:
             logger.error(f"[子心流管理] 设置ABSENT状态失败: {e}")
-
-        # 停止子心流内部循环
-        subheartflow.should_stop = True
-
-        # 取消后台任务
-        task = subheartflow.task
-        if task and not task.done():
-            task.cancel()
-            logger.debug(f"[子心流管理] 已取消 {stream_name} 的后台任务")
-
-        # 从管理字典中移除
-        if subheartflow_id in self.subheartflows:
-            del self.subheartflows[subheartflow_id]
-            logger.debug(f"[子心流管理] 已移除 {stream_name}")
-            return True
-        else:
-            logger.warning(f"[子心流管理] {stream_name} 已被提前移除")
-            return False
 
     def get_inactive_subheartflows(self, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):
         """识别并返回需要清理的不活跃(处于ABSENT状态超过一小时)子心流(id, 原因)"""
@@ -184,53 +182,6 @@ class SubHeartflowManager:
             logger.info(f"[限制] 已停止{stopped}个子心流, 剩余:{len(self.subheartflows)}")
         else:
             logger.debug(f"[限制] 无需停止, 当前总数:{len(self.subheartflows)}")
-
-    async def activate_random_subflows_to_chat(self):
-        """主状态激活时，随机选择ABSENT子心流进入CHAT状态"""
-        # 使用 self.mai_state_info 获取当前状态和限制
-        current_mai_state = self.mai_state_info.get_current_state()
-        limit = current_mai_state.get_normal_chat_max_num()
-        if limit <= 0:
-            logger.info("[激活] 当前状态不允许CHAT子心流")
-            return
-
-        # 获取所有ABSENT状态的子心流
-        absent_flows = [flow for flow in self.subheartflows.values() if flow.chat_state.chat_status == ChatState.ABSENT]
-
-        num_to_activate = min(limit, len(absent_flows))
-        if num_to_activate <= 0:
-            logger.info(f"[激活] 无可用ABSENT子心流(限额:{limit}, 可用:{len(absent_flows)})")
-            return
-
-        logger.info(f"[激活] 随机选择{num_to_activate}个ABSENT子心流进入CHAT状态")
-        activated_count = 0
-
-        for flow in random.sample(absent_flows, num_to_activate):
-            flow_id = flow.subheartflow_id
-            stream_name = chat_manager.get_stream_name(flow_id) or flow_id
-
-            if flow_id not in self.subheartflows:
-                logger.warning(f"[激活] 跳过{stream_name}, 子心流已不存在")
-                continue
-
-            logger.debug(f"[激活] 正在激活子心流{stream_name}")
-
-            # --- 限额检查 --- #
-            current_chat_count = self.count_subflows_by_state(ChatState.CHAT)
-            if current_chat_count >= limit:
-                logger.warning(f"[激活] 跳过{stream_name}, 普通聊天已达上限 ({current_chat_count}/{limit})")
-                continue  # 跳过此子心流，继续尝试激活下一个
-            # --- 结束限额检查 --- #
-
-            # 移除 states_num 参数
-            await flow.change_chat_state(ChatState.CHAT)
-
-            if flow.chat_state.chat_status == ChatState.CHAT:
-                activated_count += 1
-            else:
-                logger.warning(f"[激活] {stream_name}状态设置失败")
-
-        logger.info(f"[激活] 完成, 成功激活{activated_count}个子心流")
 
     async def deactivate_all_subflows(self):
         """将所有子心流的状态更改为 ABSENT (例如主状态变为OFFLINE时调用)"""
@@ -394,15 +345,187 @@ class SubHeartflowManager:
         else:
             logger.debug(f"{log_prefix_manager} 随机停用周期结束, 未停用任何子心流。")
 
-    def count_subflows_by_state(self, state: ChatState) -> int:
-        """统计指定状态的子心流数量
+    async def evaluate_and_transition_subflows_by_llm(self):
+        """
+        使用LLM评估每个子心流的状态，并根据LLM的判断执行状态转换（ABSENT <-> CHAT）。
+        注意：此函数包含对假设的LLM函数的调用。
+        """
+        log_prefix = "[LLM状态评估]"
+        logger.info(f"{log_prefix} 开始基于LLM评估子心流状态...")
+
+        # 获取当前状态和限制，用于CHAT激活检查
+        current_mai_state = self.mai_state_info.get_current_state()
+        chat_limit = current_mai_state.get_normal_chat_max_num()
+
+        transitioned_to_chat = 0
+        transitioned_to_absent = 0
+
+        async with self._lock:  # 在锁内获取快照并迭代
+            subflows_snapshot = list(self.subheartflows.values())
+            # 使用不上锁的版本，因为我们已经在锁内
+            current_chat_count = self.count_subflows_by_state_nolock(ChatState.CHAT)
+
+            if not subflows_snapshot:
+                logger.info(f"{log_prefix} 当前没有子心流需要评估。")
+                return
+
+            for sub_hf in subflows_snapshot:
+                flow_id = sub_hf.subheartflow_id
+                stream_name = chat_manager.get_stream_name(flow_id) or flow_id
+                current_subflow_state = sub_hf.chat_state.chat_status
+
+                # --- 获取观察内容 ---
+                # 从 sub_hf.observations 获取 ChattingObservation 并提取信息
+                _observation_summary = "没有可用的观察信息。"  # 默认值
+                try:
+                    # 检查 observations 列表是否存在且不为空
+
+                    # 假设第一个观察者是 ChattingObservation
+                    first_observation = sub_hf.observations[0]
+                    if isinstance(first_observation, ChattingObservation):
+                        # 组合中期记忆和当前聊天内容
+                        current_chat = first_observation.talking_message_str or "当前无聊天内容。"
+                        combined_summary = f"当前聊天内容:\n{current_chat}"
+                    else:
+                        logger.warning(f"{log_prefix} [{stream_name}] 第一个观察者不是 ChattingObservation 类型。")
+
+                except Exception as e:
+                    logger.warning(f"{log_prefix} [{stream_name}] 获取观察信息失败: {e}", exc_info=True)
+                    # 保留默认值或错误信息
+                    combined_summary = f"获取观察信息时出错: {e}"
+
+                # --- 获取麦麦状态 ---
+                mai_state_description = f"麦麦当前状态: {current_mai_state.value}。"
+
+                # --- 针对 ABSENT 状态 ---
+                if current_subflow_state == ChatState.ABSENT:
+                    # 构建Prompt
+                    prompt = (
+                        f"子心流 [{stream_name}] 当前处于非活跃(ABSENT)状态.\n"
+                        f"{mai_state_description}\n"
+                        f"最近观察到的内容摘要:\n---\n{combined_summary}\n---\n"
+                        f"基于以上信息，该子心流是否表现出足够的活跃迹象或重要性，"
+                        f"值得将其唤醒并进入常规聊天(CHAT)状态？\n"
+                        f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true 或 false.\n"
+                        f'例如：{{"decision": true}}\n'
+                        f"请只输出有效的 JSON 对象。"
+                    )
+
+                    # 调用LLM评估
+                    should_activate = await self._llm_evaluate_state_transition(prompt)
+                    if should_activate is None:  # 处理解析失败或意外情况
+                        logger.warning(f"{log_prefix} [{stream_name}] LLM评估返回无效结果，跳过。")
+                        continue
+
+                    if should_activate:
+                        # 检查CHAT限额
+                        # 使用不上锁的版本，因为我们已经在锁内
+                        current_chat_count = self.count_subflows_by_state_nolock(ChatState.CHAT)
+                        if current_chat_count < chat_limit:
+                            logger.info(
+                                f"{log_prefix} [{stream_name}] LLM建议激活到CHAT状态，且未达上限({current_chat_count}/{chat_limit})。正在尝试转换..."
+                            )
+                            await sub_hf.change_chat_state(ChatState.CHAT)
+                            if sub_hf.chat_state.chat_status == ChatState.CHAT:
+                                transitioned_to_chat += 1
+                            else:
+                                logger.warning(f"{log_prefix} [{stream_name}] 尝试激活到CHAT失败。")
+                        else:
+                            logger.info(
+                                f"{log_prefix} [{stream_name}] LLM建议激活到CHAT状态，但已达到上限({current_chat_count}/{chat_limit})。跳过转换。"
+                            )
+
+                # --- 针对 CHAT 状态 ---
+                elif current_subflow_state == ChatState.CHAT:
+                    # 构建Prompt
+                    prompt = (
+                        f"子心流 [{stream_name}] 当前处于常规聊天(CHAT)状态.\n"
+                        f"{mai_state_description}\n"
+                        f"最近观察到的内容摘要:\n---\n{combined_summary}\n---\n"
+                        f"基于以上信息，该子心流是否表现出不活跃、对话结束或不再需要关注的迹象，"
+                        f"应该让其进入休眠(ABSENT)状态？\n"
+                        f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true (表示应休眠) 或 false (表示不应休眠).\n"
+                        f'例如：{{"decision": true}}\n'
+                        f"请只输出有效的 JSON 对象。"
+                    )
+
+                    # 调用LLM评估
+                    should_deactivate = await self._llm_evaluate_state_transition(prompt)
+                    if should_deactivate is None:  # 处理解析失败或意外情况
+                        logger.warning(f"{log_prefix} [{stream_name}] LLM评估返回无效结果，跳过。")
+                        continue
+
+                    if should_deactivate:
+                        logger.info(f"{log_prefix} [{stream_name}] LLM建议进入ABSENT状态。正在尝试转换...")
+                        await sub_hf.change_chat_state(ChatState.ABSENT)
+                        if sub_hf.chat_state.chat_status == ChatState.ABSENT:
+                            transitioned_to_absent += 1
+
+        logger.info(
+            f"{log_prefix} LLM评估周期结束。"
+            f" 成功转换到CHAT: {transitioned_to_chat}."
+            f" 成功转换到ABSENT: {transitioned_to_absent}."
+        )
+
+    async def _llm_evaluate_state_transition(self, prompt: str) -> Optional[bool]:
+        """
+        使用 LLM 评估是否应进行状态转换，期望 LLM 返回 JSON 格式。
 
         Args:
-            state: 要统计的聊天状态枚举值
+            prompt: 提供给 LLM 的提示信息，要求返回 {"decision": true/false}。
 
         Returns:
-            int: 处于该状态的子心流数量
+            Optional[bool]: 如果成功解析 LLM 的 JSON 响应并提取了 'decision' 键的值，则返回该布尔值。
+                        如果 LLM 调用失败、返回无效 JSON 或 JSON 中缺少 'decision' 键或其值不是布尔型，则返回 None。
         """
+        log_prefix = "[LLM状态评估]"
+        try:
+            # --- 真实的 LLM 调用 ---
+            response_text, _ = await self.llm_state_evaluator.generate_response_async(prompt)
+            logger.debug(
+                f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估，原始响应: ```{response_text}```"
+            )
+
+            # --- 解析 JSON 响应 ---
+            try:
+                # 尝试去除可能的Markdown代码块标记
+                cleaned_response = response_text.strip().strip("`").strip()
+                if cleaned_response.startswith("json"):
+                    cleaned_response = cleaned_response[4:].strip()
+
+                data = json.loads(cleaned_response)
+                decision = data.get("decision")  # 使用 .get() 避免 KeyError
+
+                if isinstance(decision, bool):
+                    logger.debug(f"{log_prefix} LLM评估结果 (来自JSON): {'建议转换' if decision else '建议不转换'}")
+                    return decision
+                else:
+                    logger.warning(
+                        f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}"
+                    )
+                    return None  # 值类型不正确
+
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"{log_prefix} LLM 返回的响应不是有效的 JSON: {json_err}。响应: {response_text}")
+                # 尝试在非JSON响应中查找关键词作为后备方案 (可选)
+                if "true" in response_text.lower():
+                    logger.debug(f"{log_prefix} 在非JSON响应中找到 'true'，解释为建议转换")
+                    return True
+                if "false" in response_text.lower():
+                    logger.debug(f"{log_prefix} 在非JSON响应中找到 'false'，解释为建议不转换")
+                    return False
+                return None  # JSON 解析失败，也未找到关键词
+            except Exception as parse_err:  # 捕获其他可能的解析错误
+                logger.warning(f"{log_prefix} 解析 LLM JSON 响应时发生意外错误: {parse_err}。响应: {response_text}")
+                return None
+
+        except Exception as e:
+            logger.error(f"{log_prefix} 调用 LLM 或处理其响应时出错: {e}", exc_info=True)
+            traceback.print_exc()
+            return None  # LLM 调用或处理失败
+
+    def count_subflows_by_state(self, state: ChatState) -> int:
+        """统计指定状态的子心流数量"""
         count = 0
         # 遍历所有子心流实例
         for subheartflow in self.subheartflows.values():
@@ -411,12 +534,19 @@ class SubHeartflowManager:
                 count += 1
         return count
 
-    def get_active_subflow_minds(self) -> List[str]:
-        """获取所有活跃(非ABSENT)子心流的当前想法
-
-        返回:
-            List[str]: 包含所有活跃子心流当前想法的列表
+    def count_subflows_by_state_nolock(self, state: ChatState) -> int:
         """
+        统计指定状态的子心流数量 (不上锁版本)。
+        警告：仅应在已持有 self._lock 的上下文中使用此方法。
+        """
+        count = 0
+        for subheartflow in self.subheartflows.values():
+            if subheartflow.chat_state.chat_status == state:
+                count += 1
+        return count
+
+    def get_active_subflow_minds(self) -> List[str]:
+        """获取所有活跃(非ABSENT)子心流的当前想法"""
         minds = []
         for subheartflow in self.subheartflows.values():
             # 检查子心流是否活跃(非ABSENT状态)
