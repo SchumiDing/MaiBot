@@ -21,19 +21,78 @@ logger = get_module_logger("prompt")
 def init_prompt():
     Prompt(
         """
+{info_from_tools}
 {chat_target}
 {chat_talking_prompt}
-现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
-你的网名叫{bot_name}，{prompt_personality} {prompt_identity}。
-你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，
-你刚刚脑子里在想：
+现在你想要在群里发言或者回复。\n
+你需要扮演一位网名叫{bot_name}的人进行回复，这个人的特点是："{prompt_personality} {prompt_identity}"。
+你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，你可以参考贴吧，知乎或者微博的回复风格。
+看到以上聊天记录，你刚刚在想：
+
 {current_mind_info}
-{reason}
-回复尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。请一次只回复一个话题，不要同时回复多个人。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 ，注意只输出回复内容。
-{moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
+因为上述想法，你决定发言，原因是：{reason}
+
+回复尽量简短一些。请注意把握聊天内容，不要回复的太有条理，可以有个性。请一次只回复一个话题，不要同时回复多个人，不用指出你回复的是谁。{prompt_ger}
+请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要说你说过的话题 ，注意只输出回复内容。
+{moderation_prompt}。注意：回复不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
+
+    Prompt(
+        """
+你有以下信息可供参考：
+{structured_info}
+以上的消息是你获取到的消息，或许可以帮助你更好地回复。
+""",
+        "info_from_tools",
+    )
+
+    # Planner提示词 - 优化版
+    Prompt(
+        """你的名字是{bot_name}，一名大二女生，正在QQ群聊中。需要基于以下信息决定如何参与对话：
+{structured_info_block}
+{chat_content_block}
+你的内心想法：
+{current_mind_block}
+{replan}
+
+请综合分析聊天内容和你看到的新消息，参考内心想法，使用'decide_reply_action'工具做出决策。决策时请注意：
+
+【回复原则】
+1. 不回复(no_reply)适用：
+- 话题无关/无聊/不感兴趣
+- 最后一条消息是你自己发的且无人回应你
+- 讨论你不懂的专业话题
+- 你发送了太多消息
+
+2. 文字回复(text_reply)适用：
+- 有实质性内容需要表达
+- 可以追加emoji_query表达情绪(格式：情绪描述,如"俏皮的调侃")
+- 不要追加太多表情
+
+3. 纯表情回复(emoji_reply)适用：
+- 适合用表情回应的场景
+- 需提供明确的emoji_query
+
+4. 自我对话处理：
+- 如果是自己发的消息想继续，需自然衔接
+- 避免重复或评价自己的发言
+- 不要和自己聊天
+
+【必须遵守】
+- 必须调用工具并包含action和reasoning
+- 你可以选择文字回复(text_reply)，纯表情回复(emoji_reply)，不回复(no_reply)
+- 选择text_reply或emoji_reply时必须提供emoji_query
+- 保持回复自然，符合日常聊天习惯""",
+        "planner_prompt",
+    )
+
+    Prompt(
+        """你原本打算{action}，因为：{reasoning}
+但是你看到了新的消息，你决定重新决定行动。""",
+        "replan_prompt",
+    )
+
     Prompt("你正在qq群里聊天，下面是群里在聊的内容：", "chat_target_group1")
     Prompt("和群里聊天", "chat_target_group2")
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")
@@ -52,13 +111,13 @@ def init_prompt():
 {schedule_prompt}
 {chat_target}
 {chat_talking_prompt}
-现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
+现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言或者回复这条消息。\n
 你的网名叫{bot_name}，有人也叫你{bot_other_names}，{prompt_personality}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，{mood_prompt}，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 
+请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要浮夸，平淡一些 ，不要重复自己说过的话。
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
-{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
+{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号()，表情包，at或 @等 )。，只输出回复内容""",
         "reasoning_prompt_main",
     )
     Prompt(
@@ -79,18 +138,28 @@ class PromptBuilder:
         self.activate_messages = ""
 
     async def build_prompt(
-        self, build_mode, reason, current_mind_info, message_txt: str, sender_name: str = "某人", chat_stream=None
+        self,
+        build_mode,
+        reason,
+        current_mind_info,
+        structured_info,
+        message_txt: str,
+        sender_name: str = "某人",
+        chat_stream=None,
     ) -> Optional[tuple[str, str]]:
         if build_mode == "normal":
             return await self._build_prompt_normal(chat_stream, message_txt, sender_name)
 
         elif build_mode == "focus":
-            return await self._build_prompt_focus(reason, current_mind_info, chat_stream, message_txt, sender_name)
+            return await self._build_prompt_focus(
+                reason,
+                current_mind_info,
+                structured_info,
+                chat_stream,
+            )
         return None
 
-    async def _build_prompt_focus(
-        self, reason, current_mind_info, chat_stream, message_txt: str, sender_name: str = "某人"
-    ) -> tuple[str, str]:
+    async def _build_prompt_focus(self, reason, current_mind_info, structured_info, chat_stream) -> tuple[str, str]:
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
@@ -113,29 +182,9 @@ class PromptBuilder:
             message_list_before_now,
             replace_bot_name=True,
             merge_messages=False,
-            timestamp_mode="relative",
+            timestamp_mode="normal",
             read_mark=0.0,
         )
-
-        # 关键词检测与反应
-        keywords_reaction_prompt = ""
-        for rule in global_config.keywords_reaction_rules:
-            if rule.get("enable", False):
-                if any(keyword in message_txt.lower() for keyword in rule.get("keywords", [])):
-                    logger.info(
-                        f"检测到以下关键词之一：{rule.get('keywords', [])}，触发反应：{rule.get('reaction', '')}"
-                    )
-                    keywords_reaction_prompt += rule.get("reaction", "") + "，"
-                else:
-                    for pattern in rule.get("regex", []):
-                        result = pattern.search(message_txt)
-                        if result:
-                            reaction = rule.get("reaction", "")
-                            for name, content in result.groupdict().items():
-                                reaction = reaction.replace(f"[{name}]", content)
-                            logger.info(f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}")
-                            keywords_reaction_prompt += reaction + "，"
-                            break
 
         # 中文高手(新加的好玩功能)
         prompt_ger = ""
@@ -144,16 +193,22 @@ class PromptBuilder:
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
 
+        if structured_info:
+            structured_info_prompt = await global_prompt_manager.format_prompt(
+                "info_from_tools", structured_info=structured_info
+            )
+        else:
+            structured_info_prompt = ""
+
         logger.debug("开始构建prompt")
 
         prompt = await global_prompt_manager.format_prompt(
             "heart_flow_prompt",
+            info_from_tools=structured_info_prompt,
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private1"),
             chat_talking_prompt=chat_talking_prompt,
-            sender_name=sender_name,
-            message_txt=message_txt,
             bot_name=global_config.BOT_NICKNAME,
             prompt_personality=prompt_personality,
             prompt_identity=prompt_identity,
@@ -162,7 +217,6 @@ class PromptBuilder:
             else await global_prompt_manager.get_prompt_async("chat_target_private2"),
             current_mind_info=current_mind_info,
             reason=reason,
-            keywords_reaction_prompt=keywords_reaction_prompt,
             prompt_ger=prompt_ger,
             moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),
         )

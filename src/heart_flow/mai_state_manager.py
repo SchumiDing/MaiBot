@@ -13,6 +13,7 @@ mai_state_config = LogConfig(
 logger = get_module_logger("mai_state_manager", config=mai_state_config)
 
 
+# enable_unlimited_hfc_chat = True
 enable_unlimited_hfc_chat = False
 
 
@@ -21,14 +22,14 @@ class MaiState(enum.Enum):
     聊天状态:
     OFFLINE: 不在线：回复概率极低，不会进行任何聊天
     PEEKING: 看一眼手机：回复概率较低，会进行一些普通聊天
-    NORMAL_CHAT: 正常聊天：回复概率较高，会进行一些普通聊天和少量的专注聊天
+    NORMAL_CHAT: 正常看手机：回复概率较高，会进行一些普通聊天和少量的专注聊天
     FOCUSED_CHAT: 专注聊天：回复概率极高，会进行专注聊天和少量的普通聊天
     """
 
     OFFLINE = "不在线"
-    PEEKING = "看一眼"
-    NORMAL_CHAT = "正常聊天"
-    FOCUSED_CHAT = "专心聊天"
+    PEEKING = "看一眼手机"
+    NORMAL_CHAT = "正常看手机"
+    FOCUSED_CHAT = "专心看手机"
 
     def get_normal_chat_max_num(self):
         # 调试用
@@ -38,7 +39,7 @@ class MaiState(enum.Enum):
         if self == MaiState.OFFLINE:
             return 0
         elif self == MaiState.PEEKING:
-            return 1
+            return 2
         elif self == MaiState.NORMAL_CHAT:
             return 3
         elif self == MaiState.FOCUSED_CHAT:
@@ -52,11 +53,11 @@ class MaiState(enum.Enum):
         if self == MaiState.OFFLINE:
             return 0
         elif self == MaiState.PEEKING:
-            return 0
+            return 1
         elif self == MaiState.NORMAL_CHAT:
             return 1
         elif self == MaiState.FOCUSED_CHAT:
-            return 2
+            return 3
 
 
 class MaiStateInfo:
@@ -136,11 +137,11 @@ class MaiStateManager:
         if current_status == MaiState.OFFLINE:
             logger.info("当前[离线]，没看手机，思考要不要上线看看......")
         elif current_status == MaiState.PEEKING:
-            logger.info("当前[看一眼]，思考要不要继续聊下去......")
+            logger.info("当前[看一眼手机]，思考要不要继续聊下去......")
         elif current_status == MaiState.NORMAL_CHAT:
-            logger.info("当前在[正常聊天]思考要不要继续聊下去......")
+            logger.info("当前在[正常看手机]思考要不要继续聊下去......")
         elif current_status == MaiState.FOCUSED_CHAT:
-            logger.info("当前在[专心聊天]思考要不要继续聊下去......")
+            logger.info("当前在[专心看手机]思考要不要继续聊下去......")
 
         # 1. 麦麦每分钟都有概率离线
         if time_since_last_min_check >= 60:
