@@ -1,6 +1,8 @@
-from src.do_tool.tool_can_use.base_tool import BaseTool
+from src.do_tool.tool_can_use.base_tool import BaseTool,run_lua_code
 from src.common.logger_manager import get_logger
 from typing import Dict, Any
+from datetime import datetime
+import time
 
 logger = get_logger("get_time_date")
 
@@ -21,7 +23,6 @@ class GetCurrentDateTimeTool(BaseTool):
 
         Args:
             function_args: 工具参数（此工具不使用）
-            message_txt: 原始消息文本（此工具不使用）
 
         Returns:
             Dict: 工具执行结果
