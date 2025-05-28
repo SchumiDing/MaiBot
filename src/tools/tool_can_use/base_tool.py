@@ -14,7 +14,7 @@ logger = get_logger("base_tool")
 TOOL_REGISTRY = {}
 
 
-class BaseTool(ABC):
+class BaseTool:
     """所有工具的基类"""
 
     # 工具名称，子类必须重写
