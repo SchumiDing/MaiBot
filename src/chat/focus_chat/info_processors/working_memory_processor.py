@@ -61,10 +61,10 @@ class WorkingMemoryProcessor(BaseProcessor):
         self.subheartflow_id = subheartflow_id
 
         self.llm_model = LLMRequest(
-            model=global_config.model.sub_heartflow,
-            temperature=global_config.model.sub_heartflow["temp"],
+            model=global_config.model.focus_chat_mind,
+            temperature=global_config.model.focus_chat_mind["temp"],
             max_tokens=800,
-            request_type="working_memory",
+            request_type="focus_working_memory",
         )
 
         name = chat_manager.get_stream_name(self.subheartflow_id)
@@ -93,7 +93,7 @@ class WorkingMemoryProcessor(BaseProcessor):
                     # chat_info_truncate = observation.talking_message_str_truncate
 
             if not working_memory:
-                logger.warning(f"{self.log_prefix} 没有找到工作记忆对象")
+                logger.debug(f"{self.log_prefix} 没有找到工作记忆对象")
                 mind_info = MindInfo()
                 return [mind_info]
         except Exception as e:
@@ -180,7 +180,7 @@ class WorkingMemoryProcessor(BaseProcessor):
             working_memory_info.add_working_memory(memory_str)
             logger.debug(f"{self.log_prefix} 取得工作记忆: {memory_str}")
         else:
-            logger.warning(f"{self.log_prefix} 没有找到工作记忆")
+            logger.debug(f"{self.log_prefix} 没有找到工作记忆")
 
         # 根据聊天内容添加新记忆
         if new_memory:

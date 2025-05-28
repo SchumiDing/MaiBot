@@ -56,14 +56,14 @@ class RelationshipManager:
                 self.positive_feedback_value = 0
 
         if abs(self.positive_feedback_value) > 1:
-            logger.info(f"触发mood变更增益，当前增益系数：{self.gain_coefficient[abs(self.positive_feedback_value)]}")
+            logger.debug(f"触发mood变更增益，当前增益系数：{self.gain_coefficient[abs(self.positive_feedback_value)]}")
 
     def mood_feedback(self, value):
         """情绪反馈"""
         mood_manager = self.mood_manager
         mood_gain = mood_manager.current_mood.valence**2 * math.copysign(1, value * mood_manager.current_mood.valence)
         value += value * mood_gain
-        logger.info(f"当前relationship增益系数：{mood_gain:.3f}")
+        logger.debug(f"当前relationship增益系数：{mood_gain:.3f}")
         return value
 
     def feedback_to_mood(self, mood_value):
@@ -297,6 +297,8 @@ class RelationshipManager:
         relationship_value = await person_info_manager.get_value(person_id, "relationship_value")
         level_num = self.calculate_level_num(relationship_value)
 
+        relation_value_prompt = ""
+
         if level_num == 0 or level_num == 5:
             relationship_level = ["厌恶", "冷漠以对", "认识", "友好对待", "喜欢", "暧昧"]
             relation_prompt2_list = [
@@ -307,9 +309,11 @@ class RelationshipManager:
                 "积极回复",
                 "友善和包容的回复",
             ]
-            return f"你{relationship_level[level_num]}{person_name}，打算{relation_prompt2_list[level_num]}。\n"
+            relation_value_prompt = (
+                f"你{relationship_level[level_num]}{person_name}，打算{relation_prompt2_list[level_num]}。"
+            )
         elif level_num == 2:
-            return ""
+            relation_value_prompt = ""
         else:
             if random.random() < 0.6:
                 relationship_level = ["厌恶", "冷漠以对", "认识", "友好对待", "喜欢", "暧昧"]
@@ -321,9 +325,20 @@ class RelationshipManager:
                     "积极回复",
                     "友善和包容的回复",
                 ]
-                return f"你{relationship_level[level_num]}{person_name}，打算{relation_prompt2_list[level_num]}。\n"
+                relation_value_prompt = (
+                    f"你{relationship_level[level_num]}{person_name}，打算{relation_prompt2_list[level_num]}。"
+                )
             else:
-                return ""
+                relation_value_prompt = ""
+
+        if relation_value_prompt:
+            nickname_str = await person_info_manager.get_value(person_id, "nickname")
+            platform = await person_info_manager.get_value(person_id, "platform")
+            relation_prompt = f"{relation_value_prompt}，ta在{platform}上的昵称是{nickname_str}。\n"
+        else:
+            relation_prompt = ""
+
+        return relation_prompt
 
     @staticmethod
     def calculate_level_num(relationship_value) -> int:

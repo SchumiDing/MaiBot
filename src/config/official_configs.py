@@ -41,23 +41,16 @@ class PersonalityConfig(ConfigBase):
 class IdentityConfig(ConfigBase):
     """个体特征配置类"""
 
-    height: int = 170
-    """身高（单位：厘米）"""
-
-    weight: float = 50
-    """体重（单位：千克）"""
-
-    age: int = 18
-    """年龄（单位：岁）"""
-
-    gender: str = "女"
-    """性别（男/女）"""
-
-    appearance: str = "可爱"
-    """外貌描述"""
-
     identity_detail: list[str] = field(default_factory=lambda: [])
     """身份特征"""
+
+
+@dataclass
+class RelationshipConfig(ConfigBase):
+    """关系配置类"""
+
+    give_name: bool = False
+    """是否给其他人取名"""
 
 
 @dataclass
@@ -66,6 +59,12 @@ class ChatConfig(ConfigBase):
 
     chat_mode: str = "normal"
     """聊天模式"""
+
+    auto_focus_threshold: float = 1.0
+    """自动切换到专注聊天的阈值，越低越容易进入专注聊天"""
+
+    exit_focus_threshold: float = 1.0
+    """自动退出专注聊天的阈值，越低越容易退出专注聊天"""
 
 
 @dataclass
@@ -83,7 +82,7 @@ class MessageReceiveConfig(ConfigBase):
 class NormalChatConfig(ConfigBase):
     """普通聊天配置类"""
 
-    reasoning_model_probability: float = 0.3
+    normal_chat_first_probability: float = 0.3
     """
     发言时选择推理模型的概率（0-1之间）
     选择普通模型的概率为 1 - reasoning_normal_model_probability
@@ -92,7 +91,7 @@ class NormalChatConfig(ConfigBase):
     max_context_size: int = 15
     """上下文长度"""
 
-    message_buffer: bool = True
+    message_buffer: bool = False
     """消息缓冲器"""
 
     emoji_chance: float = 0.2
@@ -103,6 +102,9 @@ class NormalChatConfig(ConfigBase):
 
     willing_mode: str = "classical"
     """意愿模式"""
+
+    talk_frequency: float = 1
+    """回复频率阈值"""
 
     response_willing_amplifier: float = 1.0
     """回复意愿放大系数"""
@@ -130,17 +132,8 @@ class NormalChatConfig(ConfigBase):
 class FocusChatConfig(ConfigBase):
     """专注聊天配置类"""
 
-    reply_trigger_threshold: float = 3.0
-    """心流聊天触发阈值，越低越容易触发"""
-
-    default_decay_rate_per_second: float = 0.98
-    """默认衰减率，越大衰减越快"""
-
     observation_context_size: int = 12
     """可观察到的最长上下文大小，超过这个值的上下文会被压缩"""
-
-    consecutive_no_reply_threshold: int = 3
-    """连续不回复的次数阈值"""
 
     compressed_length: int = 5
     """心流上下文压缩的最短压缩长度，超过心流观察到的上下文长度，会压缩，最短压缩长度为5"""
@@ -193,8 +186,11 @@ class EmojiConfig(ConfigBase):
     check_interval: int = 120
     """表情包检查间隔（分钟）"""
 
-    save_pic: bool = False
+    save_pic: bool = True
     """是否保存图片"""
+
+    save_emoji: bool = True
+    """是否保存表情包"""
 
     cache_emoji: bool = True
     """是否缓存表情包"""
@@ -348,6 +344,9 @@ class TelemetryConfig(ConfigBase):
 class ExperimentalConfig(ConfigBase):
     """实验功能配置类"""
 
+    debug_show_chat_mode: bool = False
+    """是否在回复后显示当前聊天模式"""
+
     enable_friend_chat: bool = False
     """是否启用好友聊天"""
 
@@ -390,32 +389,41 @@ class ModelConfig(ConfigBase):
 
     model_max_output_length: int = 800  # 最大回复长度
 
-    reasoning: dict[str, Any] = field(default_factory=lambda: {})
-    """推理模型配置"""
+    utils: dict[str, Any] = field(default_factory=lambda: {})
+    """组件模型配置"""
 
-    normal: dict[str, Any] = field(default_factory=lambda: {})
-    """普通模型配置"""
+    utils_small: dict[str, Any] = field(default_factory=lambda: {})
+    """组件小模型配置"""
 
-    topic_judge: dict[str, Any] = field(default_factory=lambda: {})
-    """主题判断模型配置"""
+    normal_chat_1: dict[str, Any] = field(default_factory=lambda: {})
+    """normal_chat首要回复模型模型配置"""
 
-    summary: dict[str, Any] = field(default_factory=lambda: {})
-    """摘要模型配置"""
+    normal_chat_2: dict[str, Any] = field(default_factory=lambda: {})
+    """normal_chat次要回复模型配置"""
+
+    memory_summary: dict[str, Any] = field(default_factory=lambda: {})
+    """记忆的概括模型配置"""
 
     vlm: dict[str, Any] = field(default_factory=lambda: {})
     """视觉语言模型配置"""
 
-    heartflow: dict[str, Any] = field(default_factory=lambda: {})
-    """心流模型配置"""
+    focus_working_memory: dict[str, Any] = field(default_factory=lambda: {})
+    """专注工作记忆模型配置"""
 
-    observation: dict[str, Any] = field(default_factory=lambda: {})
-    """观察模型配置"""
+    focus_chat_mind: dict[str, Any] = field(default_factory=lambda: {})
+    """专注聊天规划模型配置"""
 
-    sub_heartflow: dict[str, Any] = field(default_factory=lambda: {})
-    """子心流模型配置"""
+    focus_self_recognize: dict[str, Any] = field(default_factory=lambda: {})
+    """专注自我识别模型配置"""
 
-    plan: dict[str, Any] = field(default_factory=lambda: {})
-    """计划模型配置"""
+    focus_tool_use: dict[str, Any] = field(default_factory=lambda: {})
+    """专注工具使用模型配置"""
+
+    focus_planner: dict[str, Any] = field(default_factory=lambda: {})
+    """专注规划模型配置"""
+
+    focus_expressor: dict[str, Any] = field(default_factory=lambda: {})
+    """专注表达器模型配置"""
 
     embedding: dict[str, Any] = field(default_factory=lambda: {})
     """嵌入模型配置"""
@@ -428,6 +436,3 @@ class ModelConfig(ConfigBase):
 
     pfc_reply_checker: dict[str, Any] = field(default_factory=lambda: {})
     """PFC回复检查模型配置"""
-
-    tool_use: dict[str, Any] = field(default_factory=lambda: {})
-    """工具使用模型配置"""

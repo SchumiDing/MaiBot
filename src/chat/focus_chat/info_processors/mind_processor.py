@@ -71,10 +71,10 @@ class MindProcessor(BaseProcessor):
         self.subheartflow_id = subheartflow_id
 
         self.llm_model = LLMRequest(
-            model=global_config.model.sub_heartflow,
-            temperature=global_config.model.sub_heartflow["temp"],
+            model=global_config.model.focus_chat_mind,
+            temperature=global_config.model.focus_chat_mind["temp"],
             max_tokens=800,
-            request_type="sub_heart_flow",
+            request_type="focus_chat_mind",
         )
 
         self.current_mind = ""
@@ -227,7 +227,7 @@ class MindProcessor(BaseProcessor):
 
         # 记录初步思考结果
         logger.debug(f"{self.log_prefix} 思考prompt: \n{prompt}\n")
-        logger.info(f"{self.log_prefix} 思考结果: {content}")
+        logger.info(f"{self.log_prefix} 聊天规划: {content}")
         self.update_current_mind(content)
 
         return content
