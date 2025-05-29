@@ -457,7 +457,7 @@ async def build_anonymous_messages(messages: List[Dict[str, Any]]) -> str:
             return "SELF"
         try:
             person_id = person_info_manager.get_person_id(platform, user_id)
-        except Exception:
+        except Exception as _e:
             person_id = None
         if not person_id:
             return "?"
