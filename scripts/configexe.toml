@@ -1,10 +1,18 @@
 [config]
-bot_config_path = "config/bot_config.toml"
+bot_config_path = "C:/GitHub/MaiBot-Core/config/bot_config.toml"
+env_path = "env.toml"
+env_file = "c:\\GitHub\\MaiBot-Core\\.env"
 
 [editor]
 window_width = 1000
 window_height = 800
 save_delay = 1.0
+
+[[editor.quick_settings.items]]
+name = "核心性格"
+description = "麦麦的核心性格描述，建议50字以内"
+path = "personality.personality_core"
+type = "text"
 
 [[editor.quick_settings.items]]
 name = "性格细节"
@@ -31,46 +39,60 @@ path = "chat.chat_mode"
 type = "text"
 
 [[editor.quick_settings.items]]
-name = "退出专注阈值"
-description = "自动退出专注聊天的阈值，越低越容易退出专注聊天"
-path = "chat.exit_focus_threshold"
+name = "回复频率（normal模式）"
+description = "麦麦回复频率，一般为1，默认频率下，30分钟麦麦回复30条（约数）"
+path = "normal_chat.talk_frequency"
 type = "number"
 
 [[editor.quick_settings.items]]
-name = "偷取表情包"
-description = "是否偷取表情包，让麦麦可以发送她保存的这些表情包"
-path = "emoji.steal_emoji"
-type = "bool"
-
-[[editor.quick_settings.items]]
-name = "核心性格"
-description = "麦麦的核心性格描述，建议50字以内"
-path = "personality.personality_core"
-type = "text"
-
-[[editor.quick_settings.items]]
-name = "自动专注阈值"
+name = "自动专注阈值（auto模式）"
 description = "自动切换到专注聊天的阈值，越低越容易进入专注聊天"
 path = "chat.auto_focus_threshold"
 type = "number"
 
 [[editor.quick_settings.items]]
-name = "自我识别处理器"
+name = "退出专注阈值（auto模式）"
+description = "自动退出专注聊天的阈值，越低越容易退出专注聊天"
+path = "chat.exit_focus_threshold"
+type = "number"
+
+[[editor.quick_settings.items]]
+name = "思考间隔（focus模式）"
+description = "思考的时间间隔（秒），可以有效减少消耗"
+path = "focus_chat.think_interval"
+type = "number"
+
+[[editor.quick_settings.items]]
+name = "连续回复能力（focus模式）"
+description = "连续回复能力，值越高，麦麦连续回复的概率越高"
+path = "focus_chat.consecutive_replies"
+type = "number"
+
+[[editor.quick_settings.items]]
+name = "自我识别处理器（focus模式）"
 description = "是否启用自我识别处理器"
 path = "focus_chat_processor.self_identify_processor"
 type = "bool"
 
 [[editor.quick_settings.items]]
-name = "工具使用处理器"
+name = "工具使用处理器（focus模式）"
 description = "是否启用工具使用处理器"
 path = "focus_chat_processor.tool_use_processor"
 type = "bool"
 
 [[editor.quick_settings.items]]
-name = "工作记忆处理器"
+name = "工作记忆处理器（focus模式）"
 description = "是否启用工作记忆处理器，不稳定，消耗量大"
 path = "focus_chat_processor.working_memory_processor"
 type = "bool"
+
+[[editor.quick_settings.items]]
+name = "显示聊天模式（debug模式）"
+description = "是否在回复后显示当前聊天模式"
+path = "experimental.debug_show_chat_mode"
+type = "bool"
+
+
 
 [translations.sections.inner]
 name = "版本"
@@ -275,6 +297,10 @@ description = "需要降低回复频率的群组列表"
 [translations.items.think_interval]
 name = "思考间隔"
 description = "思考的时间间隔（秒），可以有效减少消耗"
+
+[translations.items.consecutive_replies]
+name = "连续回复能力"
+description = "连续回复能力，值越高，麦麦连续回复的概率越高"
 
 [translations.items.observation_context_size]
 name = "观察上下文大小"
@@ -487,6 +513,10 @@ description = "暂时无效"
 [translations.items."response_splitter.enable"]
 name = "启用分割器"
 description = "是否启用回复分割器"
+
+[translations.items."telemetry.enable"]
+name = "启用遥测"
+description = "是否发送统计信息，主要是看全球有多少只麦麦"
 
 [translations.items."chinese_typo.enable"]
 name = "启用错别字"
