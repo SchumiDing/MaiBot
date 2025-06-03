@@ -12,7 +12,7 @@ logger = get_logger("async_task_manager")
 class AsyncTask:
     """异步任务基类"""
 
-    def __init__(self, task_name: str | None = None, wait_before_start: int = 0, run_interval: int = 0):
+    def __init__(self, task_name: str | None = None, wait_before_start: int = 0, run_interval: int = 0, weight: int = 1):
         self.task_name: str = task_name or self.__class__.__name__
         """任务名称"""
 
@@ -21,6 +21,9 @@ class AsyncTask:
 
         self.run_interval: int = run_interval
         """多次运行的时间间隔（单位：秒，设为0则仅运行一次）"""
+
+        self.weight: int = weight
+        """任务权重，默认为1，权重越大，任务优先级越高"""
 
     @abstractmethod
     async def run(self):
@@ -104,6 +107,7 @@ class AsyncTaskManager:
 
             self.tasks[task.task_name] = task_inst  # 将任务添加到任务列表
             logger.debug(f"已启动任务 '{task.task_name}'")
+            await self.sort_tasks_by_weight()  # 确保任务按权重从大到小排序
 
     def get_tasks_status(self) -> Dict[str, Dict[str, str]]:
         """
@@ -115,6 +119,15 @@ class AsyncTaskManager:
                 "status": "running" if not task.done() else "done",
             }
         return tasks_status
+    
+    async def sort_tasks_by_weight(self):
+        """
+        按照任务权重对任务从大到小排序
+        """
+        async with self._lock:
+            sorted_tasks = sorted(self.tasks.items(), key=lambda item: item[1].weight, reverse=True)
+            self.tasks = {name: task for name, task in sorted_tasks}
+            logger.debug("已按照任务权重对任务进行排序")
 
     async def stop_and_wait_all_tasks(self):
         """
