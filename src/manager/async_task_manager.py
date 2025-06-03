@@ -104,10 +104,10 @@ class AsyncTaskManager:
             task_inst.add_done_callback(
                 call_back or self._default_finish_call_back
             )  # 添加完成回调函数-用户自定义，或默认的FallBack
-
+            task_inst.weight = task.weight  # 设置任务权重
             self.tasks[task.task_name] = task_inst  # 将任务添加到任务列表
             logger.debug(f"已启动任务 '{task.task_name}'")
-            await self.sort_tasks_by_weight()  # 确保任务按权重从大到小排序
+            await self.sort_tasks_by_weight()  # 添加任务后重新排序
 
     def get_tasks_status(self) -> Dict[str, Dict[str, str]]:
         """
@@ -121,13 +121,9 @@ class AsyncTaskManager:
         return tasks_status
     
     async def sort_tasks_by_weight(self):
-        """
-        按照任务权重对任务从大到小排序
-        """
-        async with self._lock:
-            sorted_tasks = sorted(self.tasks.items(), key=lambda item: item[1].weight, reverse=True)
-            self.tasks = {name: task for name, task in sorted_tasks}
-            logger.debug("已按照任务权重对任务进行排序")
+        sorted_tasks = sorted(self.tasks.items(), key=lambda item: item[1].weight, reverse=True)
+        self.tasks = {name: task for name, task in sorted_tasks}
+        logger.debug("已按照任务权重对任务进行排序") # 确保任务按权重从大到小排序
 
     async def stop_and_wait_all_tasks(self):
         """
